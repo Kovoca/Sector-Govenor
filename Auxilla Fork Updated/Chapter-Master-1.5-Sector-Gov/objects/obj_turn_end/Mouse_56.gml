@@ -1,0 +1,203 @@
+//so this only runs if there aren't these types of instances
+if (!instance_exists(obj_saveload) && !instance_exists(obj_popup) && !instance_exists(obj_ncombat) && !instance_exists(obj_fleet)) {
+    if ((obj_controller.complex_event == true) || instance_exists(obj_temp_meeting)) {
+        exit;
+    }
+
+    var xxx = camera_get_view_x(view_camera[0]) + 535;
+    var yyy = camera_get_view_y(view_camera[0]) + 200;
+
+    if ((cooldown <= 0) && (battle_world[current_battle] == 0) && (combating == 0)) {
+        if ((mouse_x >= xxx + 132) && (mouse_y >= yyy + 354) && (mouse_x < xxx + 259) && (mouse_y < yyy + 389)) {
+            // Run like hell, space
+            var _flee_fleet = battle_pobject[current_battle];
+            if (!instance_exists(_flee_fleet)) {
+                // The player fleet for this battle is already gone (destroyed/withdrawn); clear this
+                // battle from the queue instead of dereferencing a dead instance. The Fight button just
+                // below already guards this the same way -- the flee button was missing it (hard crash:
+                // "Unable to find instance for object index 0" at battle_pobject[current_battle].x).
+                alarm[4] = 1;
+                exit;
+            }
+            with (obj_fleet_select) {
+                instance_destroy();
+            }
+            var that = instance_nearest(_flee_fleet.x, _flee_fleet.y, obj_p_fleet);
+            if (instance_exists(that)) {
+                that.alarm[3] = 1;
+            }
+            var that2 = instance_create(0, 0, obj_popup);
+            that2.type = 99;
+            obj_controller.force_scroll = 1;
+        }
+
+        if ((mouse_x >= xxx + 272) && (mouse_y >= yyy + 354) && (mouse_x < xxx + 399) && (mouse_y < yyy + 389)) {
+            // Fight fight fight, space
+            var _battle_fleet = battle_pobject[current_battle];
+            if (!instance_exists(_battle_fleet) || (_battle_fleet.capital_number + _battle_fleet.frigate_number + _battle_fleet.escort_number <= 0)) {
+                alarm[4] = 1;
+                exit;
+            }
+
+            obj_controller.cooldown = 8000;
+            instance_activate_all();
+
+            // Start battle here
+
+            combating = 1;
+
+            var _battle_instance = instance_create(0, 0, obj_fleet);
+            _battle_instance.enemy[1] = enemy_fleet[1];
+            _battle_instance.enemy_status[1] = -1;
+
+            _battle_instance.en_capital[1] = ecap[1];
+            _battle_instance.en_frigate[1] = efri[1];
+            _battle_instance.en_escort[1] = eesc[1];
+
+            // Plug in all of the enemies first
+            // And then plug in the allies after then with their status set to positive
+
+            var _ship_index = 1;
+            for (var g = 2; g <= 6; g++) {
+                if (enemy_fleet[g] != 0) {
+                    _ship_index += 1;
+                    _battle_instance.enemy[_ship_index] = enemy_fleet[g];
+                    _battle_instance.enemy_status[_ship_index] = -1;
+
+                    _battle_instance.en_capital[_ship_index] = ecap[g];
+                    _battle_instance.en_frigate[_ship_index] = efri[g];
+                    _battle_instance.en_escort[_ship_index] = eesc[g];
+                }
+            }
+            for (var g = 1; g <= 6; g++) {
+                if (allied_fleet[g] != 0) {
+                    _ship_index += 1;
+                    _battle_instance.enemy[_ship_index] = allied_fleet[g];
+                    _battle_instance.enemy_status[_ship_index] = 1;
+
+                    _battle_instance.en_capital[_ship_index] = acap[g];
+                    _battle_instance.en_frigate[_ship_index] = afri[g];
+                    _battle_instance.en_escort[_ship_index] = aesc[g];
+                }
+            }
+
+            if (battle_special[current_battle] == "chaos") {
+                _battle_instance.chaos_exp = 1;
+            }
+            if (battle_special[current_battle] == "BLOOD") {
+                _battle_instance.chaos_exp = 2;
+            }
+
+            instance_activate_all();
+            var stahr = instance_nearest(battle_pobject[current_battle].x, battle_pobject[current_battle].y, obj_star);
+            _battle_instance.star_name = stahr.name;
+
+            add_fleet_ships_to_combat(battle_pobject[current_battle], _battle_instance);
+
+            instance_deactivate_all(true);
+            instance_activate_object(obj_controller);
+            instance_activate_object(obj_ini);
+            instance_activate_object(_battle_instance);
+            instance_activate_object(obj_cursor);
+        }
+    }
+
+    if ((cooldown <= 0) && (battle_world[current_battle] > 0) && (combating == 0)) {
+        var tip = "";
+
+        if ((mouse_x >= xxx + 132) && (mouse_y >= yyy + 354) && (mouse_x < xxx + 259) && (mouse_y < yyy + 389)) {
+            tip = "offensive";
+        }
+
+        if ((mouse_x >= xxx + 272) && (mouse_y >= yyy + 354) && (mouse_x < xxx + 399) && (mouse_y < yyy + 389)) {
+            tip = "defensive";
+        }
+
+        if (tip != "") {
+            var _loc = battle_location[current_battle];
+            var _planet = battle_world[current_battle]; // Fight fight fight, ground
+            obj_controller.cooldown = 8;
+
+            // Start battle here
+
+            combating = 1;
+
+            instance_deactivate_all(true);
+            instance_activate_object(obj_controller);
+            instance_activate_object(obj_ini);
+            instance_activate_object(battle_object[current_battle]);
+
+            var _battle_obj = battle_object[current_battle];
+
+            instance_create(0, 0, obj_ncombat);
+            obj_ncombat.enemy = battle_opponent[current_battle];
+            obj_ncombat.battle_object = _battle_obj;
+            obj_ncombat.battle_loc = _loc;
+            obj_ncombat.battle_id = _planet;
+
+            var _enemy = obj_ncombat.enemy;
+
+            var _planet_data = new PlanetData(_planet, _battle_obj);
+            if (tip == "offensive") {
+                obj_ncombat.formation_set = 1;
+            } else if (tip == "defensive") {
+                obj_ncombat.formation_set = 2;
+            }
+
+            var _allow_fortifications = false;
+            var _fort_factions = [
+                eFACTION.PLAYER,
+                eFACTION.TYRANIDS,
+                eFACTION.ORK
+            ];
+            _allow_fortifications = array_contains(_fort_factions, _planet_data.current_owner);
+
+            if (!_allow_fortifications) {
+                var owner_fac_status;
+                _allow_fortifications = _planet_data.owner_status() != "War";
+            }
+
+            if (_allow_fortifications) {
+                obj_ncombat.fortified = _planet_data.fortification_level;
+                // §16h: bridge the planet's ground defences (p_defenses -> ground_defences) into the
+                // defending battle. This was declared but never assigned (player_defenses hard-set to 0 in
+                // obj_ncombat Create_0), so Turret Battery region-buildings — and any p_defenses — never
+                // spawned the weapon-emplacement unit. Alarm_5 already writes battle losses back to
+                // p_defenses[battle_id], so the setup read was the missing half of the loop.
+                obj_ncombat.player_defenses = _planet_data.ground_defences;
+                // §16h: the world's Bastion region-buildings reinforce the fortress in this battle — a DISTINCT,
+                // uncapped bonus (each Bastion = +bunker HP/armour in obj_ncombat/Alarm_0), separate from the
+                // fortification tier above. Counted live from the serialised regions, so it covers old saves too.
+                obj_ncombat.bastion_bonus = planet_bastion_count(_planet_data.system, _planet_data.planet);
+            }
+
+            if (obj_ncombat.enemy == eFACTION.NECRONS) {
+                obj_ncombat.fortified = 0;
+            }
+
+            obj_ncombat.battle_special = battle_special[current_battle];
+            obj_ncombat.battle_climate = _planet_data.planet_type;
+
+            if (_enemy == eFACTION.IMPERIUM) {
+                obj_ncombat.threat = min(1000000, _planet_data.guardsmen);
+            } else if (obj_ncombat.enemy <= eFACTION.NECRONS && _enemy >= eFACTION.ELDAR) {
+                obj_ncombat.threat = _planet_data.planet_forces[_enemy];
+            }
+
+            var _roster = new Roster();
+            with (_roster) {
+                roster_location = _loc;
+                roster_planet = _planet;
+                determine_full_roster();
+                only_locals();
+                update_roster();
+                if (array_length(selected_units)) {
+                    setup_battle_formations();
+                    add_to_battle();
+                }
+            }
+            delete _roster;
+            instance_deactivate_object(battle_object[current_battle]);
+        }
+    }
+}

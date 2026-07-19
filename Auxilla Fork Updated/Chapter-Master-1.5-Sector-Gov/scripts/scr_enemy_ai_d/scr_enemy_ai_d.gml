@@ -1,0 +1,358 @@
+/// @self Asset.GMObject.obj_star
+function scr_enemy_ai_d() {
+    if (x < -15000) {
+        x += 20000;
+        y += 20000;
+    }
+    if (x < -15000) {
+        x += 20000;
+        y += 20000;
+    }
+    if (x < -15000) {
+        x += 20000;
+        y += 20000;
+    }
+
+    // Planetary problems here
+
+    for (var i = 1; i <= planets; i++) {
+        //this will skip for given planet if no problems associated wiht planet
+        if ((p_necrons[i] > 0) && (p_necrons[i] < 6)) {
+            p_necrons[i] += 1;
+        }
+
+        var wob = 0;
+        var fallen = find_problem_planet(i, "fallen");
+        if (fallen > -1 && storm - 1 > 0) {
+            p_timer[i][fallen]++;
+        }
+
+        // Requesting help here
+        if (((p_halp[i] == 1) || (p_halp[i] == 1.1)) && (p_population[i] > 0) && (p_owner[i] < 6)) {
+            if ((p_orks[i] + p_tau[i] + p_traitors[i] + p_chaos[i] + p_necrons[i] == 0) && (p_tyranids[i] < 4)) {
+                p_halp[i] = 0;
+            }
+        }
+        if ((p_halp[i] == 0) && (p_population[i] > 0) && (p_owner[i] < 6) && (p_owner[i] != 1) && (present_fleet[1] <= 0) && (p_player[i] <= 0)) {
+            var enemy1 = "", enemies = 0, minimum = 5, tx = "";
+
+            if (p_guardsmen[i] + p_pdf[i] <= 1000000) {
+                minimum = 4;
+            } else if (p_guardsmen[i] + p_pdf[i] <= 500000) {
+                minimum = 3;
+            } else if (p_guardsmen[i] + p_pdf[i] <= 200000) {
+                minimum = 2;
+            } else if (p_guardsmen[i] + p_pdf[i] <= 1000) {
+                minimum = 1;
+            }
+
+            if (p_orks[i] >= minimum) {
+                enemy1 = "Ork";
+                enemies += 1;
+            }
+            if (p_tau[i] >= minimum) {
+                enemy1 = "Tau";
+                enemies += 1;
+            }
+            if (p_chaos[i] >= minimum) {
+                enemy1 = "Heretic";
+                enemies += 1;
+            }
+            if (p_traitors[i] >= minimum) {
+                enemy1 = "Chaos Space Marine";
+                enemies += 1;
+            }
+            if (p_necrons[i] >= minimum) {
+                enemy1 = "Necron";
+                enemies += 1;
+            }
+            if ((p_tyranids[i] >= minimum) && (vision > 0) && (p_tyranids[i] > 3)) {
+                enemy1 = "Tyranid";
+                enemies += 1;
+            }
+
+            if (enemies == 1) {
+                p_halp[i] = 1;
+                tx = $"The Planetary Governor of {planet_numeral_name(i)} requests help against {enemy1} forces!";
+                scr_alert("green", "halp", string(tx), x, y);
+                scr_event_log("", string(tx), name);
+            }
+            if (enemies > 1) {
+                p_halp[i] = 1;
+                tx = "The Planetary Governor of " + string(name) + " " + scr_roman(i) + " requests help against numerous enemy forces!";
+                scr_alert("green", "halp", string(tx), x, y);
+                scr_event_log("", string(tx), name);
+            }
+        }
+    }
+    for (var i = 1; i <= planets; i++) {
+        problem_count_down(i);
+        if (planet_problemless(i)) {
+            continue;
+        }
+
+        var _pdata = get_planet_data(i);
+        with (_pdata){
+            problem_end_turn_checks();
+        }
+
+        mechanicus_missions_end_turn(i);
+
+        var _beast_hunt = has_problem_planet_and_time(i, "hunt_beast", 0);
+        if (_beast_hunt > -1) {
+            try {
+                complete_beast_hunt_mission(i, _beast_hunt);
+            } catch (_exception) {
+                ERROR_HANDLER.handle_exception(_exception);
+            }
+        }
+
+        var train_forces = has_problem_planet_and_time(i, "train_forces", 0);
+        if (train_forces > -1) {
+            try {
+                complete_train_forces_mission(i, train_forces);
+            } catch (_exception) {
+                ERROR_HANDLER.handle_exception(_exception);
+            }
+        }
+
+        if (((p_tyranids[i] == 3) || (p_tyranids[i] == 4)) && (p_population[i] > 0)) {
+            if (!has_problem_planet(i, "Hive Fleet")) {
+                var roll = irandom_range(100, 300);
+                var cont = 0;
+
+                if ((p_tyranids[i] == 3) && (roll <= 5)) {
+                    cont = 1;
+                }
+                if ((p_tyranids[i] == 4) && (roll <= 8)) {
+                    cont = 1;
+                }
+
+                var firstest = open_problem_slot(i);
+                if (cont == 1 && firstest > -1) {
+                    p_problem[i][firstest] = "Hive Fleet";
+                    p_timer[i][firstest] = irandom_range(60, 120) + 1;
+                    p_timer[i][firstest] += irandom_range(80, 120) + 1;
+                    // p_timer[i][firstest]=floor(random_range(3,6))+1;
+                    // show_message("Hive Fleet Destination: "+string(name)+"#ETA: "+string(p_timer[i][firstest]));
+
+                    var fleet, xx, yy;
+                    xx = random_range(room_width * 1.25, room_width * 2);
+                    xx = choose(xx * -1, xx);
+                    xx = x + xx;
+                    yy = random_range(room_height * 1.25, room_height * 2);
+                    yy = choose(yy * -1, yy);
+                    yy = y + yy;
+                    fleet = instance_create(xx, yy, obj_en_fleet);
+                    fleet.owner = eFACTION.TYRANIDS;
+                    fleet.sprite_index = spr_fleet_tyranid;
+                    fleet.image_speed = 0;
+
+                    fleet.capital_number = choose(7, 8, 9);
+                    fleet.frigate_number = round(random_range(6, 12));
+                    fleet.escort_number = round(random_range(12, 27));
+
+                    /*fleet.capital_number=choose(5,6);
+	                fleet.frigate_number=round(random_range(4,8));
+	                fleet.escort_number=round(random_range(8,18));*/
+
+                    fleet.image_index = floor(fleet.capital_number + (fleet.frigate_number / 2) + (fleet.escort_number / 4));
+                    fleet.image_alpha = 0;
+
+                    fleet.action_x = x;
+                    fleet.action_y = y;
+
+                    fleet.action_eta = p_timer[i][firstest];
+                    fleet.action = "move";
+                }
+            }
+        }
+
+        if (has_problem_planet_and_time(i, "Hive Fleet", 3) > -1) {
+            var woop = scr_role_count("Chief " + string(obj_ini.role[100][17]), "");
+
+            var o, yep, yep2;
+            o = 0;
+            yep = true;
+            yep2 = false;
+            if (scr_has_disadv("Psyker Intolerant")) {
+                yep = false;
+            }
+
+            if ((obj_controller.known[eFACTION.TYRANIDS] == 0) && (woop != 0) && (yep != false)) {
+                scr_popup("Shadow in the Warp", $"Chief {obj_ini.role[100][17]} " + string(obj_ini.name[0][5]) + " reports a disturbance in the warp.  He claims it is like a shadow.", "shadow", "");
+                scr_event_log("red", $"Chief {obj_ini.role[100][17]} reports a disturbance in the warp.  He claims it is like a shadow.");
+            }
+            if ((obj_controller.known[eFACTION.TYRANIDS] == 0) && (woop == 0) && (yep != false)) {
+                var q = 0, q2 = 0;
+                repeat (90) {
+                    if (q2 == 0) {
+                        q += 1;
+                        if (obj_ini.role[0][q] == obj_ini.role[100][eROLE.CHAPTERMASTER]) {
+                            q2 = q;
+                            if (string_count("0", obj_ini.spe[0][q2]) > 0) {
+                                yep2 = true;
+                            }
+                        }
+                    }
+                }
+                if (yep2 == true) {
+                    scr_popup("Shadow in the Warp", "You are distracted and bothered by a nagging sensation in the warp.  It feels as though a shadow descends upon your sector.", "shadow", "");
+                    scr_event_log("red", "You sense a disturbance in the warp.  It feels something like a massive shadow.");
+                }
+            }
+
+            g = 50;
+            i = 50;
+            obj_controller.known[eFACTION.TYRANIDS] = 1;
+        }
+    }
+
+    if (storm > 0) {
+        storm -= 1;
+        if (storm == 0) {
+            var tr = "Warp Storms over " + string(name) + " dissipate.";
+            scr_alert("green", "Warp", tr, x, y);
+            scr_event_log("green", tr);
+        }
+    }
+    if (trader > 0) {
+        trader -= 1;
+        if (trader == 0) {
+            var tr = "Rogue Trader fleet departs from " + string(name) + ".";
+            scr_alert("green", "Warp", tr, x, y);
+            scr_event_log("green", tr);
+        }
+    }
+
+    // Colonists Colonize
+
+    with (obj_star) {
+        if (x < -10000) {
+            x += 20000;
+            y += 20000;
+        }
+    }
+    with (obj_star) {
+        if (x < -10000) {
+            x += 20000;
+            y += 20000;
+        }
+    }
+
+    var already_enroute = false;
+    var cur_star = id;
+    with (obj_en_fleet) {
+        if ((owner == eFACTION.IMPERIUM) && fleet_has_cargo("colonize")) {
+            already_enroute = action_x == cur_star.x && action_y == cur_star.y;
+        }
+    }
+
+    if (!already_enroute) {
+        var pop_doner_options = [];
+        //this stops needless repeats of searches
+        if (!struct_exists(obj_controller.end_turn_insights, "population_doners")) {
+            pop_doner_options = find_population_doners();
+        }
+        obj_controller.end_turn_insights.population_doners = pop_doner_options;
+        pop_doner_options = obj_controller.end_turn_insights.population_doners;
+
+        var deletion = -1;
+        for (var i = 0; i < array_length(pop_doner_options); i++) {
+            if (pop_doner_options[i][0] == id) {
+                deletion = i;
+                break;
+            }
+        }
+        if (deletion > -1) {
+            array_delete(pop_doner_options, deletion, 1);
+        }
+
+        var priority_requests = [];
+        var non_priority_requests = [];
+
+        var r = 0, yep = 0;
+        for (r = 1; r <= planets; r++) {
+            // temp5: new hive, temp4: new planet
+            if (!scr_planet_owned_by_group(r, fetch_faction_group())) {
+                continue;
+            }
+            if ((p_population[r] > 0) || (p_type[r] == "")) {
+                continue;
+            }
+            if ((!space_hulk) && (!craftworld) && (p_type[r] != "Dead")) {
+                var priority_imperium = [
+                    "Hive",
+                    "Temperate",
+                    "Shrine"
+                ];
+                if ((p_owner[r] == eFACTION.IMPERIUM) && array_contains(priority_imperium, p_type[r])) {
+                    array_push(priority_requests, r);
+                    break;
+                }
+
+                if ((p_owner[r] == eFACTION.MECHANICUS) && (p_type[r] == "Forge")) {
+                    array_push(priority_requests, r);
+                    break;
+                }
+                // Count player planets as HIVE PLANETS so that they are prioritized
+                if (p_owner[r] == eFACTION.PLAYER) {
+                    array_push(priority_requests, r);
+                    break;
+                }
+
+                if ((p_owner[r] == eFACTION.IMPERIUM) || (p_owner[r] == eFACTION.ECCLESIARCHY)) {
+                    array_push(non_priority_requests, r);
+                }
+            }
+        }
+
+        if (array_length(pop_doner_options) > 0 && (array_length(non_priority_requests) || array_length(priority_requests))) {
+            var onceh = 0;
+            var random_chance = floor(random(100)) + 1;
+            var doner_index = 0;
+            // TODO check possible fixes for this logic
+            // currently this only calculates for priority requests for pops
+            for (var i = 1; i < array_length(pop_doner_options); i++) {
+                if (star_distace_calc(pop_doner_options[i], priority_requests[i]) < star_distace_calc(pop_doner_options[doner_index], priority_requests[doner_index])) {
+                    doner_index = i;
+                }
+            }
+            var doner_star = pop_doner_options[doner_index][0];
+            var doner_planet = pop_doner_options[doner_index][1];
+
+            if (array_length(priority_requests) && (random_chance <= 2)) {
+                // A hive is requesting repopulation
+
+                new_colony_fleet(doner_star.id, doner_planet, self.id, priority_requests[0]);
+            } else if (array_length(non_priority_requests) && (random_chance <= 2)) {
+                // Some other world is requesting repopulation
+
+                new_colony_fleet(doner_star.id, doner_planet, self.id, non_priority_requests[0]);
+            }
+        }
+
+        instance_activate_all();
+        with (obj_star) {
+            if (x < -10000) {
+                x += 20000;
+                y += 20000;
+            }
+            if (x < -10000) {
+                x += 20000;
+                y += 20000;
+            }
+        }
+    }
+
+    // Local problems will go here
+    var planet;
+    for (var i = 1; i <= planets; i++) {
+        if (i < array_length(system_garrison)) {
+            var garrison = get_garrison(i);
+            if (garrison.garrison_force){
+                garrison.garrison_disposition_change();
+            }
+        }
+    }
+}
